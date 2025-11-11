@@ -1,5 +1,4 @@
 import streamlit as st
-import anthropic
 import json
 
 # Page configuration
@@ -53,8 +52,6 @@ st.markdown("""
 # Initialize session state
 if 'pairing' not in st.session_state:
     st.session_state.pairing = None
-if 'cigar_shops' not in st.session_state:
-    st.session_state.cigar_shops = []
 
 # Data
 bourbons = [
@@ -233,41 +230,6 @@ def get_cigar_reasoning(cigar, bourbon):
             f"{cigar['notes'].split(',')[0]} from the cigar enhances the "
             f"{bourbon['notes'].split(',')[0]} in the bourbon.")
 
-def search_cigar_shops(zip_code, api_key):
-    """Search for cigar shops using Anthropic API"""
-    try:
-        client = anthropic.Anthropic(api_key=api_key)
-        
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=1000,
-            tools=[
-                {
-                    "type": "web_search_20250305",
-                    "name": "web_search"
-                }
-            ],
-            messages=[
-                {
-                    "role": "user",
-                    "content": f"Find cigar shops near ZIP code {zip_code}. Return ONLY a JSON array with no preamble or markdown, with each shop having: name, address, phone, distance (estimated). Format: [{{\"name\":\"...\",\"address\":\"...\",\"phone\":\"...\",\"distance\":\"...\"}}]. If you cannot find specific shops, return an empty array []"
-                }
-            ]
-        )
-        
-        shops_text = ""
-        for block in message.content:
-            if block.type == "text":
-                shops_text += block.text
-        
-        clean_text = shops_text.replace("```json", "").replace("```", "").strip()
-        shops = json.loads(clean_text)
-        
-        return shops if isinstance(shops, list) else []
-    except Exception as e:
-        st.error(f"Error searching for cigar shops: {str(e)}")
-        return []
-
 # Header
 st.title("🥃 Bourbon & Cigar Pairing")
 st.markdown("### Find your perfect match")
@@ -365,47 +327,3 @@ if st.session_state.pairing:
                     <p style="color: #fde68a; font-size: 0.85em;">{match['profile']}</p>
                 </div>
                 """, unsafe_allow_html=True)
-
-# Cigar shop locator
-st.markdown("---")
-st.markdown("## 📍 Find Cigar Shops Near You")
-
-col1, col2 = st.columns([3, 1])
-with col1:
-    zip_code = st.text_input("Enter ZIP code:", max_chars=5, placeholder="12345")
-with col2:
-    st.markdown("<br>", unsafe_allow_html=True)
-    search_button = st.button("🔍 Search", use_container_width=True)
-
-# API key input (in sidebar for security)
-with st.sidebar:
-    st.markdown("## Settings")
-    api_key = st.text_input("Anthropic API Key:", type="password", help="Required for cigar shop search")
-    st.markdown("[Get your API key](https://console.anthropic.com/)")
-
-if search_button:
-    if not api_key:
-        st.error("Please enter your Anthropic API key in the sidebar")
-    elif not zip_code or len(zip_code) != 5:
-        st.error("Please enter a valid 5-digit ZIP code")
-    else:
-        with st.spinner("Searching for cigar shops..."):
-            shops = search_cigar_shops(zip_code, api_key)
-            st.session_state.cigar_shops = shops
-
-# Display shops
-if st.session_state.cigar_shops:
-    shops = st.session_state.cigar_shops
-    st.markdown(f"### Found {len(shops)} shop{'s' if len(shops) != 1 else ''} near {zip_code}")
-    
-    for shop in shops:
-        st.markdown(f"""
-        <div class="shop-card">
-            <h4>{shop.get('name', 'Unknown')}</h4>
-            <p style="color: #fde68a;">📍 {shop.get('address', 'N/A')}</p>
-            {f"<p style='color: #fcd34d;'>📞 {shop.get('phone', 'N/A')}</p>" if shop.get('phone') else ""}
-            {f"<p style='color: #fbbf24; font-size: 0.85em;'>📏 {shop.get('distance', 'N/A')}</p>" if shop.get('distance') else ""}
-        </div>
-        """, unsafe_allow_html=True)
-elif 'cigar_shops' in st.session_state and st.session_state.cigar_shops == []:
-    st.info(f"No cigar shops found for ZIP code {zip_code}. Try a different area.")
